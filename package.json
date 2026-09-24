@@ -1,0 +1,64 @@
+{
+  "name": "catcard-sdk",
+  "version": "0.1.0",
+  "description": "JavaScript SDK for CatCard hardware wallets: air-gapped communication over BBQr and BC-UR QR codes",
+  "keywords": [
+    "catcard",
+    "hardware-wallet",
+    "airgap",
+    "qr",
+    "bbqr",
+    "bc-ur",
+    "psbt",
+    "bitcoin"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "unpkg": "./dist/catcard.iife.js",
+  "jsdelivr": "./dist/catcard.iife.js",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint:pkg": "publint",
+    "check": "npm run typecheck && npm run test && npm run build && npm run lint:pkg",
+    "prepublishOnly": "npm run check"
+  },
+  "dependencies": {
+    "pako": "^2.2.0"
+  },
+  "devDependencies": {
+    "@ngraveio/bc-ur": "^1.1.13",
+    "@types/node": "^26.6.2",
+    "@types/pako": "^2.0.4",
+    "bbqr": "^1.2.0",
+    "publint": "^0.3.24",
+    "tsdown": "^0.23.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}
