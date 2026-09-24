@@ -1,7 +1,7 @@
 {
   "name": "catcard-sdk",
   "version": "0.1.0",
-  "description": "JavaScript SDK for CatCard hardware wallets: air-gapped communication over BBQr and BC-UR QR codes",
+  "description": "CatCard hardware wallet SDK: use an air-gapped CatCard as a regular EVM, Solana, Tron and Bitcoin wallet in dapps (EIP-1193/6963, Wallet Standard, TIP-1193, sats-connect) over BBQr and BC-UR QR codes",
   "keywords": [
     "catcard",
     "hardware-wallet",
