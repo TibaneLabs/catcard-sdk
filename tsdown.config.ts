@@ -30,7 +30,7 @@ export default defineConfig([
     platform: 'browser',
     target: 'es2020',
     minify: true,
-    sourcemap: true,
+    sourcemap: false,
     deps: { alwaysBundle: [/./], onlyBundle: false },
   },
   {
@@ -40,7 +40,7 @@ export default defineConfig([
     platform: 'browser',
     target: 'es2020',
     minify: true,
-    sourcemap: true,
+    sourcemap: false,
     // TronWeb is too large to bundle: the Tron provider uses a global `TronWeb` when present.
     deps: { alwaysBundle: [/^(?!tronweb)/], neverBundle: ['tronweb'], onlyBundle: false },
     outputOptions: { codeSplitting: false },

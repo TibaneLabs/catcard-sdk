@@ -24,6 +24,16 @@
     "wbip",
     "bitcoin-wallet-standard"
   ],
+  "homepage": "https://github.com/TibaneLabs/catcard-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/TibaneLabs/catcard-sdk/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TibaneLabs/catcard-sdk.git"
+  },
+  "license": "MIT",
+  "author": "Mark Karpeles",
   "type": "module",
   "sideEffects": [
     "./dist/auto.js",
@@ -175,5 +185,8 @@
     "tronweb": {
       "optional": true
     }
+  },
+  "publishConfig": {
+    "tag": "next"
   }
 }
