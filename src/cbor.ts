@@ -102,6 +102,8 @@ function encodeItem(value: CborValue, out: number[], depth: number): void {
 }
 
 export function cborDecode(data: Uint8Array): CborValue {
+  // Normalize subclasses such as Node's Buffer, whose slice() returns views rather than copies.
+  if (Object.getPrototypeOf(data) !== Uint8Array.prototype) data = new Uint8Array(data);
   const reader = new Reader(data);
   const value = reader.item(0);
   if (reader.pos !== data.length) throw new SyntaxError('Trailing bytes after CBOR item');
