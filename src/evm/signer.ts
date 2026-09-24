@@ -21,9 +21,9 @@ import {
 import { publicKeyToAddress, toAccount } from 'viem/accounts';
 import type { CatCardBridge, ExchangeDetail } from '../bridge';
 import { CatCardError, QRDecodeError } from '../errors';
-import { checkRequestId, decodeEthSignature, EthDataType, encodeEthSignRequest } from '../registry/eth';
+import { decodeEthSignature, EthDataType, encodeEthSignRequest } from '../registry/eth';
 import { KeyPath } from '../registry/keypath';
-import { randomUUIDBytes } from '../registry/uuid';
+import { checkRequestId, randomUUIDBytes } from '../registry/uuid';
 import { createURSequence, type URSequenceOptions } from '../sequence';
 import { hexToBytes, utf8Encode } from '../util/bytes';
 import type { EvmAccount } from './accounts';

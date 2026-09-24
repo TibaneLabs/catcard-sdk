@@ -4,4 +4,4 @@ export { decodeCryptoHDKey, encodeCryptoHDKey, type CryptoHDKey } from './hdkey'
 export { type PathComponent } from './keypath';
 export * from './sol';
 export { TAGS } from './tags';
-export { formatUUID, randomUUIDBytes } from './uuid';
+export { checkRequestId, formatUUID, randomUUIDBytes } from './uuid';

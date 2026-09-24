@@ -1,7 +1,6 @@
 import { CborTag } from '../cbor';
 import { QRDecodeError } from '../errors';
 import { UR } from '../ur';
-import { equalBytes } from '../util/bytes';
 import { expectMap, intKeyMap, optBytes, optText, optUint, reqBytes } from './cbor-helpers';
 import { KeyPath } from './keypath';
 import { TAGS } from './tags';
@@ -83,11 +82,4 @@ export function decodeEthSignature(ur: UR): EthSignature {
   const signature = reqBytes(map, 2, 'eth-signature');
   if (signature.length < 65) throw new QRDecodeError('eth-signature: signature too short');
   return { requestId: optBytes(map, 1, 'eth-signature'), signature, origin: optText(map, 3, 'eth-signature') };
-}
-
-/** Throws unless the response carries the expected request ID (a missing ID is tolerated). */
-export function checkRequestId(expected: Uint8Array, got: Uint8Array | undefined): void {
-  if (got && !equalBytes(expected, got)) {
-    throw new QRDecodeError('This signature belongs to a different request');
-  }
 }
