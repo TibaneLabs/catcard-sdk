@@ -10,10 +10,20 @@
     "bbqr",
     "bc-ur",
     "psbt",
-    "bitcoin"
+    "bitcoin",
+    "ethereum",
+    "evm",
+    "eip-1193",
+    "eip-6963",
+    "solana",
+    "wallet-standard"
   ],
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/auto.js",
+    "./dist/auto.cjs",
+    "./dist/catcard-inject.iife.js"
+  ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -28,12 +38,63 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./evm": {
+      "import": {
+        "types": "./dist/evm.d.ts",
+        "default": "./dist/evm.js"
+      },
+      "require": {
+        "types": "./dist/evm.d.cts",
+        "default": "./dist/evm.cjs"
+      }
+    },
+    "./solana": {
+      "import": {
+        "types": "./dist/solana.d.ts",
+        "default": "./dist/solana.js"
+      },
+      "require": {
+        "types": "./dist/solana.d.cts",
+        "default": "./dist/solana.cjs"
+      }
+    },
+    "./ui": {
+      "import": {
+        "types": "./dist/ui.d.ts",
+        "default": "./dist/ui.js"
+      },
+      "require": {
+        "types": "./dist/ui.d.cts",
+        "default": "./dist/ui.cjs"
+      }
+    },
+    "./inject": {
+      "import": {
+        "types": "./dist/inject.d.ts",
+        "default": "./dist/inject.js"
+      },
+      "require": {
+        "types": "./dist/inject.d.cts",
+        "default": "./dist/inject.cjs"
+      }
+    },
+    "./auto": {
+      "import": {
+        "types": "./dist/auto.d.ts",
+        "default": "./dist/auto.js"
+      },
+      "require": {
+        "types": "./dist/auto.d.cts",
+        "default": "./dist/auto.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "unpkg": "./dist/catcard.iife.js",
   "jsdelivr": "./dist/catcard.iife.js",
   "files": [
-    "dist"
+    "dist",
+    "assets"
   ],
   "engines": {
     "node": ">=20"
@@ -70,6 +131,7 @@
     "@types/node": "^26.6.2",
     "@types/pako": "^2.0.4",
     "bbqr": "^1.2.0",
+    "happy-dom": "^20.14.5",
     "publint": "^0.3.24",
     "tsdown": "^0.23.0",
     "typescript": "^7.0.2",

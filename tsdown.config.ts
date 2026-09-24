@@ -1,18 +1,26 @@
 import { defineConfig } from 'tsdown';
 
+const entry = {
+  index: 'src/index.ts',
+  evm: 'src/evm/index.ts',
+  solana: 'src/solana/index.ts',
+  ui: 'src/ui/index.ts',
+  inject: 'src/inject.ts',
+  auto: 'src/auto.ts',
+};
+
 export default defineConfig([
-  // ESM + CJS for bundlers, browser extensions and Node.js.
+  // ESM + CJS for bundlers, browser extensions and Node.js. Dependencies stay external.
   {
-    entry: ['src/index.ts'],
+    entry,
     format: ['esm', 'cjs'],
     platform: 'neutral',
     target: 'es2020',
     dts: true,
     sourcemap: true,
     clean: true,
-    deps: { neverBundle: ['pako'] },
   },
-  // Self-contained bundle for <script> tags, exposed as `window.CatCard`.
+  // Self-contained bundles for <script> tags.
   {
     entry: { catcard: 'src/index.ts' },
     format: 'iife',
@@ -21,6 +29,17 @@ export default defineConfig([
     target: 'es2020',
     minify: true,
     sourcemap: true,
-    deps: { alwaysBundle: ['pako'], onlyBundle: ['pako'] },
+    deps: { alwaysBundle: [/./], onlyBundle: false },
+  },
+  {
+    // Injects CatCard on load: <script src=".../catcard-inject.iife.js"></script>
+    entry: { 'catcard-inject': 'src/auto.ts' },
+    format: 'iife',
+    platform: 'browser',
+    target: 'es2020',
+    minify: true,
+    sourcemap: true,
+    deps: { alwaysBundle: [/./], onlyBundle: false },
+    outputOptions: { inlineDynamicImports: true },
   },
 ]);

@@ -16,8 +16,10 @@ export function memoryStorage(): KeyValueStorage {
 
 /** `localStorage` when available and writable, in-memory storage otherwise. */
 export function defaultStorage(): KeyValueStorage {
+  // Recent Node.js versions expose a warning-emitting localStorage global; only use it in browsers.
+  if (typeof window === 'undefined') return memoryStorage();
   try {
-    const storage = globalThis.localStorage;
+    const storage = window.localStorage;
     const probe = '__catcard_probe__';
     storage.setItem(probe, probe);
     storage.removeItem(probe);

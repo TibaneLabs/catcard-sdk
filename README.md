@@ -1,93 +1,145 @@
 # catcard-sdk
 
-JavaScript SDK for talking to CatCard hardware wallets over air-gapped QR codes, from websites, browser extensions and Node.js.
+JavaScript SDK for CatCard hardware wallets. It makes an air-gapped CatCard work like a regular browser wallet for EVM and Solana dapps, and exposes the underlying QR protocols (BBQr, BC-UR) for everything else.
 
-- **BBQr** and **BC-UR** (fountain-coded) encoding and decoding, wire-compatible with the reference implementations
-- Works on `Uint8Array` only: no `Buffer`, no Node.js polyfills; runs in browsers, MV3 extension service workers and Node.js ≥ 18
-- ESM, CommonJS and a `<script>`-tag bundle (`window.CatCard`); a single runtime dependency (`pako`)
-- Renderer-agnostic: bring your own QR drawing / camera scanning library
+- **Drop-in wallet for dapps**: an EIP-1193 provider announced via EIP-6963 (MetaMask-style, found by wagmi, RainbowKit, Web3Modal…) and a Wallet Standard wallet for Solana (found by `@solana/wallet-adapter`, like Phantom)
+- **Built-in UI**: a modal that shows animated request QR codes (600 ms/frame for the CatCard camera) and scans the device's answer with the webcam
+- **Keystone-compatible messages**: `eth-sign-request` / `eth-signature`, `sol-sign-request` / `sol-signature`, and `crypto-hdkey` / `crypto-account` / `crypto-multi-accounts` account exports
+- **Signatures verified and applied by the SDK**: the device returns only a signature; the SDK checks it was made by the expected account, then produces the signed transaction
+- **BBQr and BC-UR codecs**, wire-compatible with the reference implementations; `Uint8Array` only, no Node.js polyfills
 
-## Install
+## Quick start: make CatCard available to a dapp
 
 ```sh
 npm install catcard-sdk
 ```
 
-## The flow
-
-A wallet or extension talks to CatCard in three steps:
-
-1. **Scan the device's addresses.** The CatCard shows its account/address export as a QR (animated if needed), and the app scans it.
-2. **Send a transaction to sign.** The app builds the transaction and shows it as an animated QR for the CatCard to scan.
-3. **Scan the result.** After signing on the device, the CatCard shows either the signed transaction or just the signature, and the app scans it.
-
-Steps 1 and 3 use `QRReceiver` + `interpretScan`, step 2 uses `encodePsbt` / `encodeUR` + `QRAnimator`.
-
-### Showing a QR to the device
-
 ```ts
-import { encodePsbt, QRAnimator } from 'catcard-sdk';
-import QRCode from 'qrcode';
+import { injectCatCard } from 'catcard-sdk/inject';
 
-const sequence = encodePsbt(psbtBase64); // Bitcoin → BBQr by default
-
-const animator = new QRAnimator(sequence, {
-  // Frames only use QR alphanumeric characters; level L gives the most capacity.
-  onFrame: (frame) => QRCode.toCanvas(canvas, frame, { errorCorrectionLevel: 'L' }),
+injectCatCard({
+  evm: {
+    rpc: {
+      1: 'https://mainnet.example/rpc',   // your RPC endpoints (URL or viem transport)
+      8453: 'https://base.example/rpc',
+    },
+  },
+  solana: {
+    rpc: { 'solana:mainnet': 'https://solana.example/rpc' },
+  },
 });
-animator.start(); // 600 ms per frame by default (the CatCard camera is slow)
-// ...
-animator.stop();
 ```
 
-### Scanning a QR from the device
+That's it: "CatCard" now appears in the dapp's wallet picker alongside extension wallets. Or, with default settings, simply `import 'catcard-sdk/auto'`, or add a script tag:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/catcard-sdk/dist/catcard-inject.iife.js"></script>
+```
+
+### The user flow
+
+1. **Connect**: the dapp requests accounts, the modal opens the webcam and the user shows their CatCard's account export QR. Accounts are remembered (in `localStorage` by default).
+2. **Sign**: when the dapp asks for a signature, the modal shows the request as an animated QR code. The user scans it with the CatCard and confirms on the device.
+3. **Scan back**: the CatCard shows the signature as a QR code; the modal scans it, and the SDK verifies it and returns the signed transaction or message to the dapp.
+
+### RPC endpoints
+
+Wallets are expected to give dapps access to the chain. The EVM provider forwards all read-only calls (`eth_call`, `eth_getBalance`, …) to the active chain's RPC endpoint, and uses it to fill in nonce, gas and fees and to broadcast `eth_sendTransaction`. The Solana wallet uses its endpoint for `signAndSendTransaction`.
+
+Chains without a configured endpoint fall back to their public RPC, which is rate-limited: **production integrations should set their own**.
+
+| Option | Default |
+| --- | --- |
+| `evm.rpc` | `{ [chainId]: url \| viem Transport }` → each chain's public RPC from viem |
+| `evm.chains` | Ethereum, Sepolia, Base, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche (dapps can add more via `wallet_addEthereumChain`) |
+| `evm.defaultChainId` | the first chain |
+| `solana.rpc` | `{ 'solana:mainnet' \| 'solana:devnet' \| 'solana:testnet': url }` → public cluster endpoints |
+
+### Supported methods
+
+**EVM (EIP-1193)**: `eth_requestAccounts`, `eth_accounts`, `eth_chainId`, `eth_sendTransaction`, `eth_signTransaction`, `personal_sign`, `eth_signTypedData_v4` (and `_v3`), `wallet_switchEthereumChain`, `wallet_addEthereumChain`, `wallet_requestPermissions` / `getPermissions` / `revokePermissions`; everything else is forwarded to the RPC endpoint. `eth_sign` is refused as unsafe. Errors use EIP-1193 codes (4001 when the user cancels).
+
+**Solana (Wallet Standard)**: `standard:connect`, `standard:disconnect`, `standard:events`, `solana:signTransaction`, `solana:signAndSendTransaction`, `solana:signMessage`; legacy and v0 transactions.
+
+## Using the building blocks
+
+### Your own UI (e.g. in a browser extension)
+
+The modal is only the default. Anything implementing `CatCardBridge` can drive the QR round trip, for example an extension popup:
 
 ```ts
-import { QRReceiver, interpretScan } from 'catcard-sdk';
+import type { CatCardBridge } from 'catcard-sdk';
+
+const bridge: CatCardBridge = {
+  async exchange({ title, description, details, request, parse }) {
+    // 1. if `request` is set, display it (see QRAnimator below) for the device to scan
+    // 2. scan the device's answer with a QRReceiver
+    // 3. return parse(receiver.result()); if parse throws, show the error and scan again
+    // Reject with UserRejectedError if the user cancels.
+  },
+};
+
+injectCatCard({ bridge });
+```
+
+### Signers without injection
+
+```ts
+import { CatCardEthereumProvider } from 'catcard-sdk/evm';
+import { createWalletClient, custom } from 'viem';
+
+const provider = new CatCardEthereumProvider({ bridge, rpc: { 1: 'https://…' } });
+await provider.connect();
+
+// As a viem account…
+const client = createWalletClient({ account: provider.getSigner().toViemAccount(), transport: custom(provider) });
+// …or through the provider directly
+await provider.request({ method: 'personal_sign', params: ['0x68656c6c6f', provider.selectedAccount!.address] });
+```
+
+`CatCardSolanaSigner` (in `catcard-sdk/solana`) does the same for Solana: `signTransaction(wireBytes)` returns the transaction with the account's signature in its slot.
+
+### Raw QR transport
+
+For Bitcoin (PSBT over BBQr) or custom flows, the transport layer is exported from the package root:
+
+```ts
+import { encodePsbt, QRAnimator, QRReceiver, interpretScan } from 'catcard-sdk';
+
+const animator = new QRAnimator(encodePsbt(psbtBase64), { onFrame: (frame) => drawQR(frame) }); // BBQr by default for Bitcoin
+animator.start();
 
 const receiver = new QRReceiver();
-
 scanner.onDecode = (text) => {
-  const status = receiver.receive(text); // any order, duplicates are fine
-  progressBar.value = status.progress;
-  if (!status.complete) return;
-
-  const payload = interpretScan(receiver.result()!);
-  switch (payload.kind) {
-    case 'psbt': /* signed PSBT */ break;
-    case 'transaction': /* finalized transaction, ready to broadcast */ break;
-    case 'json': /* e.g. an account export */ break;
-    case 'ur': /* chain-specific UR (payload.ur.type, payload.ur.decodeCbor()) */ break;
-  }
+  if (receiver.receive(text).complete) handle(interpretScan(receiver.result()!)); // signed PSBT, transaction…
 };
 ```
 
-## QR formats
+| Target | Default QR format |
+| --- | --- |
+| Bitcoin (and testnet) | BBQr, the only format the Bitcoin-only firmware reads |
+| Other UTXO chains, EVM, Solana, Tron | BC-UR |
 
-| Target | Default | Notes |
+## Entry points
+
+| Import | Contents | Dependencies |
 | --- | --- | --- |
-| Bitcoin (and testnet) | BBQr | The only format the Bitcoin-only firmware reads |
-| Other UTXO chains (BCH, LTC, DOGE, MONA…) | BC-UR | |
-| EVM, Solana, Tron | BC-UR | |
+| `catcard-sdk` | QR codecs (BBQr, BC-UR, CBOR), registry types, `QRAnimator`, `QRReceiver`, PSBT helpers | `pako` |
+| `catcard-sdk/evm` | EIP-1193 provider, signer, viem account, EIP-6963 | `viem`, `@noble/curves` |
+| `catcard-sdk/solana` | Wallet Standard wallet, signer, transaction helpers | `@noble/curves`, `@scure/base`, `@wallet-standard/*` |
+| `catcard-sdk/ui` | Default modal bridge | `uqr`, `jsqr` (loaded only without native `BarcodeDetector`) |
+| `catcard-sdk/inject`, `catcard-sdk/auto` | One-call setup of all of the above | |
 
-Override with `format`, and declare the firmware variant so incompatible choices fail early:
-
-```ts
-encodePsbt(psbt, { chain: 'litecoin' });               // BC-UR crypto-psbt
-encodePsbt(psbt, { format: 'ur' });                     // Bitcoin over BC-UR
-encodePsbt(psbt, { firmware: 'bitcoin-only', format: 'ur' }); // throws
-encodePsbt(psbt, { bbqr: { maxVersion: 15 } });         // smaller, easier-to-scan frames
-```
-
-Lower-level building blocks are exported too: `bbqrSplit` / `bbqrJoin`, `UREncoder` / `URDecoder`, `UR`, `cborEncode` / `cborDecode`, `createBBQrSequence` / `createURSequence`.
+ESM and CommonJS builds are provided; Node.js ≥ 20. `dist/catcard.iife.js` (core, `window.CatCard`) and `dist/catcard-inject.iife.js` (auto-inject) are self-contained script-tag bundles.
 
 ## Development
 
 ```sh
-npm test          # vitest
+npm test          # vitest (includes a simulated CatCard that signs real requests)
 npm run typecheck
-npm run build     # dist/: ESM, CJS, .d.ts, and catcard.iife.js
+npm run build
 npm run check     # all of the above + publint
+npm run icon      # regenerate src/icon.ts from assets/catcard-icon.svg
 ```
 
-Interop tests run the codecs against the `bbqr` and `@ngraveio/bc-ur` reference libraries (dev dependencies only).
+Interop tests check the codecs against the reference `bbqr`, `@ngraveio/bc-ur` and `@keystonehq/bc-ur-registry*` libraries, and Solana transactions against `@solana/web3.js` (all dev dependencies only).
