@@ -172,6 +172,8 @@ ESM and CommonJS builds are provided; Node.js ≥ 20. `dist/catcard.iife.js` (co
 
 ## Development
 
+Development needs Node.js ≥ 22.18 (the build and test tooling); the published package runs on Node.js ≥ 20.
+
 ```sh
 npm test          # vitest (includes a simulated CatCard that signs real requests)
 npm run typecheck

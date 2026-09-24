@@ -21,13 +21,13 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # Node 24 ships npm 11, which supports trusted publishing.
           node-version: 24
           registry-url: https://registry.npmjs.org
-          cache: npm
+          # No dependency cache in the release workflow (cache poisoning).
       - run: npm ci
       - name: Check the tag matches package.json
         if: github.ref_type == 'tag'
