@@ -1,4 +1,18 @@
 import { ed25519 } from '@noble/curves/ed25519';
+import {
+  address,
+  AccountRole,
+  appendTransactionMessageInstruction,
+  blockhash as kitBlockhash,
+  compileTransaction,
+  createTransactionMessage,
+  getTransactionDecoder,
+  getTransactionEncoder,
+  pipe,
+  setTransactionMessageConfig,
+  setTransactionMessageFeePayer,
+  setTransactionMessageLifetimeUsingBlockhash,
+} from '@solana/kit';
 import { base58 } from '@scure/base';
 import {
   Keypair,
@@ -36,6 +50,41 @@ function v0Transfer(feePayer: PublicKey): Uint8Array {
   return new VersionedTransaction(message).serialize();
 }
 
+// Built with @solana/kit: @solana/web3.js does not support v1 (SIMD-0385) transactions.
+function v1Transfer(feePayer: PublicKey): Uint8Array {
+  const ix = SystemProgram.transfer({ fromPubkey: owner(), toPubkey: Keypair.generate().publicKey, lamports: 1000 });
+  const message = pipe(
+    createTransactionMessage({ version: 1 }),
+    (m) => setTransactionMessageFeePayer(address(feePayer.toBase58()), m),
+    (m) => setTransactionMessageLifetimeUsingBlockhash({ blockhash: kitBlockhash(blockhash), lastValidBlockHeight: 0n }, m),
+    // Two config fields, one of them 8 bytes wide, so the parser has to skip their values.
+    (m) => setTransactionMessageConfig({ computeUnitLimit: 1000, priorityFeeLamports: 5000n }, m),
+    (m) =>
+      appendTransactionMessageInstruction(
+        {
+          programAddress: address(ix.programId.toBase58()),
+          accounts: ix.keys.map((k) => ({
+            address: address(k.pubkey.toBase58()),
+            role: k.isSigner ? (k.isWritable ? AccountRole.WRITABLE_SIGNER : AccountRole.READONLY_SIGNER) : k.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY,
+          })),
+          data: new Uint8Array(ix.data),
+        },
+        m,
+      ),
+  );
+  return new Uint8Array(getTransactionEncoder().encode(compileTransaction(message)));
+}
+
+/** Decodes a v1 transaction with @solana/kit: its message bytes and its signatures, in signer order. */
+function decodeV1(raw: Uint8Array): { message: Uint8Array; signers: string[]; signatures: (Uint8Array | null)[] } {
+  const tx = getTransactionDecoder().decode(raw);
+  return {
+    message: new Uint8Array(tx.messageBytes),
+    signers: Object.keys(tx.signatures),
+    signatures: Object.values(tx.signatures).map((s) => (s ? new Uint8Array(s) : null)),
+  };
+}
+
 describe('Solana accounts', () => {
   it('reads Keystone-style crypto-multi-accounts exports', () => {
     const accounts = deriveSolanaAccounts(decodeAccountExport(device.solanaAccountExport(2)));
@@ -56,6 +105,27 @@ describe('parseSolanaTransaction', () => {
         ref.message.staticAccountKeys.slice(0, ref.message.header.numRequiredSignatures).map((k) => k.toBase58()),
       );
     }
+  });
+
+  it('matches @solana/kit for v1 transactions', () => {
+    const payer = Keypair.generate().publicKey;
+    const raw = v1Transfer(payer);
+    const parsed = parseSolanaTransaction(raw);
+    const ref = decodeV1(raw);
+    expect(parsed.version).toBe(1);
+    expect(parsed.message).toEqual(ref.message);
+    expect(parsed.signers.map((s) => base58.encode(s))).toEqual(ref.signers);
+    expect(parsed.signers.map((s) => base58.encode(s))).toEqual([payer.toBase58(), owner().toBase58()]);
+    expect(parsed.signatureOffsets).toEqual([raw.length - 128, raw.length - 64]);
+  });
+
+  it('rejects truncated or padded v1 transactions', () => {
+    const raw = v1Transfer(owner());
+    expect(() => parseSolanaTransaction(raw.subarray(0, raw.length - 1))).toThrow(/Truncated/);
+    expect(() => parseSolanaTransaction(raw.subarray(0, 30))).toThrow(/Truncated/);
+    const padded = new Uint8Array(raw.length + 1);
+    padded.set(raw);
+    expect(() => parseSolanaTransaction(padded)).toThrow(/Trailing data/);
   });
 });
 
@@ -121,6 +191,40 @@ describe('CatCardSolanaWallet', () => {
     const request = decodeSolSignRequest(device.requests[device.requests.length - 1]!);
     expect(request).toMatchObject({ signType: SolSignType.Transaction, origin: 'test-dapp' });
     expect(request.derivationPath.toString()).toBe("m/44'/501'/0'/0'");
+  });
+
+  it('signs v1 transactions as the fee payer or a co-signer', async () => {
+    const [account] = await connect();
+    const { supportedTransactionVersions } = wallet.features[SolanaSignTransaction];
+    expect(supportedTransactionVersions).toContain(1);
+
+    const unsigned = v1Transfer(owner());
+    const before = new Uint8Array(unsigned);
+    const [signed] = await wallet.features[SolanaSignTransaction].signTransaction({ account: account!, transaction: unsigned });
+    expect(new Uint8Array(unsigned)).toEqual(before);
+    const tx = decodeV1(signed!.signedTransaction);
+    expect(ed25519.verify(tx.signatures[0]!, tx.message, owner().toBytes())).toBe(true);
+    expect(decodeSolSignRequest(device.requests[device.requests.length - 1]!).signData).toEqual(tx.message);
+
+    const [cosigned] = await wallet.features[SolanaSignTransaction].signTransaction({
+      account: account!,
+      transaction: v1Transfer(Keypair.generate().publicKey),
+    });
+    const tx2 = decodeV1(cosigned!.signedTransaction);
+    expect(tx2.signatures[0]).toBeNull();
+    expect(ed25519.verify(tx2.signatures[1]!, tx2.message, owner().toBytes())).toBe(true);
+  });
+
+  it('signs and sends v1 transactions, returning the fee payer signature', async () => {
+    const [account] = await connect();
+    const [out] = await wallet.features[SolanaSignAndSendTransaction].signAndSendTransaction({
+      account: account!,
+      chain: 'solana:devnet',
+      transaction: v1Transfer(owner()),
+    });
+    const call = sent[0] as { body: { params: [string] } };
+    const tx = decodeV1(Buffer.from(call.body.params[0], 'base64'));
+    expect(out!.signature).toEqual(tx.signatures[0]);
   });
 
   it('signs and sends through the configured RPC', async () => {

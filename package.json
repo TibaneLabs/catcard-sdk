@@ -167,6 +167,7 @@
     "@keystonehq/bc-ur-registry-eth": "^0.22.1",
     "@keystonehq/bc-ur-registry-sol": "^0.9.5",
     "@ngraveio/bc-ur": "^1.1.13",
+    "@solana/kit": "^8.3.0",
     "@solana/web3.js": "^1.99.0",
     "@types/node": "^26.6.2",
     "@types/pako": "^2.0.4",

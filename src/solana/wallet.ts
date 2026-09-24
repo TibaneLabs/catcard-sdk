@@ -61,7 +61,7 @@ export interface SolanaWalletOptions extends SolanaSignerOptions {
 }
 
 const FEATURES_PER_ACCOUNT = [SolanaSignAndSendTransaction, SolanaSignTransaction, SolanaSignMessage] as const;
-const TRANSACTION_VERSIONS = ['legacy', 0] as const;
+const TRANSACTION_VERSIONS = ['legacy', 0, 1] as const;
 
 export type CatCardSolanaFeatures = StandardConnectFeature &
   StandardDisconnectFeature &

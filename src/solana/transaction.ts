@@ -4,7 +4,7 @@ import { CatCardError } from '../errors';
 import { equalBytes } from '../util/bytes';
 
 export interface ParsedSolanaTransaction {
-  version: 'legacy' | 0;
+  version: 'legacy' | 0 | 1;
   /** Byte offset of each signature slot in the transaction. */
   signatureOffsets: number[];
   /** The message bytes: what signers sign. */
@@ -24,7 +24,43 @@ function readShortVec(bytes: Uint8Array, offset: number): [value: number, next: 
   throw new CatCardError('Invalid compact-u16 in Solana transaction');
 }
 
+/** First byte of a v1 (SIMD-0385) transaction. Legacy and v0 ones start with a signature count, always below 128. */
+const V1_VERSION_BYTE = 0x81;
+
+// v1 layout: version byte, 3-byte header, u32 config mask, 32-byte lifetime, u8 instruction count, u8 address count,
+// addresses, config values (4 bytes per mask bit), instruction headers (u8 program, u8 accounts, u16 data length),
+// instruction payloads (account indices then data), then the signatures, with no length prefix.
+function parseV1Transaction(tx: Uint8Array): ParsedSolanaTransaction {
+  const truncated = () => new CatCardError('Truncated Solana transaction');
+  if (tx.length < 42) throw truncated();
+  const requiredSignatures = tx[1]!;
+  const configMask = (tx[4]! | (tx[5]! << 8) | (tx[6]! << 16) | (tx[7]! << 24)) >>> 0;
+  const instructionCount = tx[40]!;
+  const addressCount = tx[41]!;
+  if (addressCount < requiredSignatures) throw new CatCardError('Malformed Solana transaction account keys');
+  const keysStart = 42;
+  let configCount = 0;
+  for (let mask = configMask; mask; mask >>>= 1) configCount += mask & 1;
+  const headersStart = keysStart + addressCount * 32 + configCount * 4;
+  let offset = headersStart + instructionCount * 4;
+  if (offset > tx.length) throw truncated();
+  for (let i = 0; i < instructionCount; i++) {
+    const header = headersStart + i * 4;
+    offset += tx[header + 1]! + (tx[header + 2]! | (tx[header + 3]! << 8));
+  }
+  const end = offset + requiredSignatures * 64;
+  if (end > tx.length) throw truncated();
+  if (end < tx.length) throw new CatCardError('Trailing data after Solana transaction signatures');
+  return {
+    version: 1,
+    signatureOffsets: Array.from({ length: requiredSignatures }, (_, i) => offset + i * 64),
+    message: tx.subarray(0, offset),
+    signers: Array.from({ length: requiredSignatures }, (_, i) => tx.subarray(keysStart + i * 32, keysStart + (i + 1) * 32)),
+  };
+}
+
 export function parseSolanaTransaction(tx: Uint8Array): ParsedSolanaTransaction {
+  if (tx[0] === V1_VERSION_BYTE) return parseV1Transaction(tx);
   const [signatureCount, afterCount] = readShortVec(tx, 0);
   const signatureOffsets = Array.from({ length: signatureCount }, (_, i) => afterCount + i * 64);
   const messageStart = afterCount + signatureCount * 64;

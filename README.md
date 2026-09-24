@@ -91,7 +91,7 @@ Chains without a configured endpoint fall back to their public RPC, which is rat
 
 **EVM (EIP-1193)**: `eth_requestAccounts`, `eth_accounts`, `eth_chainId`, `eth_sendTransaction`, `eth_signTransaction`, `personal_sign`, `eth_signTypedData_v4` (and `_v3`), `wallet_switchEthereumChain`, `wallet_addEthereumChain`, `wallet_requestPermissions` / `getPermissions` / `revokePermissions`; everything else is forwarded to the RPC endpoint. `eth_sign` is refused as unsafe. Errors use EIP-1193 codes (4001 when the user cancels).
 
-**Solana (Wallet Standard)**: `standard:connect`, `standard:disconnect`, `standard:events`, `solana:signTransaction`, `solana:signAndSendTransaction`, `solana:signMessage`; legacy and v0 transactions.
+**Solana (Wallet Standard)**: `standard:connect`, `standard:disconnect`, `standard:events`, `solana:signTransaction`, `solana:signAndSendTransaction`, `solana:signMessage`; legacy, v0 and v1 (SIMD-0385) transactions.
 
 **Tron (TIP-1193)**: `eth_requestAccounts`, `tron_requestAccounts`, `eth_accounts`, `eth_chainId`, `wallet_switchEthereumChain`; signing goes through the provider's `tronWeb`: `trx.sign`, `trx.multiSign`, `trx.signMessageV2` (TIP-712 typed data is not supported by the device protocol). Dapps using `@tronweb3/tronwallet-adapters` need a CatCard adapter there to list it; TIP-6963 discovery is in place for that.
 
