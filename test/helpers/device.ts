@@ -9,6 +9,9 @@ import { QRReceiver } from '../../src/receiver';
 import {
   decodeEthSignRequest,
   decodeSolSignRequest,
+  decodeTronSignRequest,
+  encodeTronSignature,
+  TronDataType,
   EthDataType,
   encodeEthSignature,
   encodeMultiAccounts,
@@ -21,6 +24,8 @@ import { encodeCryptoHDKey } from '../../src/registry/hdkey';
 import { UR, URDecoder } from '../../src/ur';
 import { utf8Decode } from '../../src/util/bytes';
 import { hmac } from '@noble/hashes/hmac';
+import { sha256 } from '@noble/hashes/sha256';
+import { hashTronMessage } from '../../src/tron/signer';
 import { sha512 } from '@noble/hashes/sha512';
 
 export type VConvention = 'parity' | '27' | 'eip155';
@@ -76,6 +81,14 @@ export class SimulatedCatCard {
     return new UR('crypto-hdkey', cborEncode(encodeCryptoHDKey(hdkey)));
   }
 
+  /** `crypto-hdkey` export of the Tron account `m/44'/195'/0'`. */
+  tronAccountExport(): UR {
+    const path = KeyPath.parse("m/44'/195'/0'", this.fingerprint);
+    const key = this.master.derive(path.toString());
+    const hdkey: CryptoHDKey = { key: key.publicKey!, chainCode: key.chainCode!, origin: path, children: KeyPath.parse('0/*') };
+    return new UR('crypto-hdkey', cborEncode(encodeCryptoHDKey(hdkey)));
+  }
+
   solanaPublicKey(account: number): Uint8Array {
     return ed25519.getPublicKey(slip10(this.seed, KeyPath.parse(`m/44'/501'/${account}'/0'`)));
   }
@@ -104,6 +117,7 @@ export class SimulatedCatCard {
   respond(request: UR): UR {
     if (request.type === 'eth-sign-request') return this.signEth(request);
     if (request.type === 'sol-sign-request') return this.signSol(request);
+    if (request.type === 'tron-sign-request') return this.signTron(request);
     throw new Error(`device cannot handle ${request.type}`);
   }
 
@@ -135,6 +149,16 @@ export class SimulatedCatCard {
     else v = req.chainId * 2 + 35 + sig.recovery;
     const signature = new Uint8Array([...sig.toCompactRawBytes(), ...minimalBytes(v)]);
     return encodeEthSignature({ requestId: req.requestId, signature, origin: 'CatCard' });
+  }
+
+  private signTron(ur: UR): UR {
+    const req = decodeTronSignRequest(ur);
+    if (req.derivationPath.sourceFingerprint !== this.fingerprint) throw new Error('not my key');
+    const path = this.signWithWrongKey ? "m/44'/195'/0'/0/9" : req.derivationPath.toString();
+    const hash = req.dataType === TronDataType.Transaction ? sha256(req.signData) : hashTronMessage(req.signData);
+    const sig = secp256k1.sign(hash, this.master.derive(path).privateKey!);
+    const v = this.vConvention === 'parity' ? sig.recovery : 27 + sig.recovery;
+    return encodeTronSignature({ requestId: req.requestId, signature: new Uint8Array([...sig.toCompactRawBytes(), v]) });
   }
 
   private signSol(ur: UR): UR {

@@ -2,6 +2,8 @@ import type { CatCardBridge } from './bridge';
 import { announceEIP6963Provider, CatCardEthereumProvider, type EIP6963ProviderInfo, type EvmProviderOptions } from './evm';
 import { CatCardSolanaWallet, registerCatCardSolanaWallet, type SolanaWalletOptions } from './solana';
 import { defaultStorage, type KeyValueStorage } from './storage';
+import { announceTIP6963Provider, CatCardTronProvider, type TronProviderOptions } from './tron';
+import type { ProviderInfo } from './discovery';
 import { createModalBridge, type ModalBridgeOptions } from './ui';
 
 export interface InjectOptions {
@@ -17,6 +19,8 @@ export interface InjectOptions {
   ethereum?: false | (Partial<Omit<EvmProviderOptions, 'bridge'>> & { eip6963?: Partial<EIP6963ProviderInfo> });
   /** Solana wallet options (RPC endpoints, chains...), or `false` to disable. */
   solana?: false | Partial<Omit<SolanaWalletOptions, 'bridge'>>;
+  /** Tron provider options (full node endpoints...), or `false` to disable. Needs `tronweb`. */
+  tron?: false | (Partial<Omit<TronProviderOptions, 'bridge'>> & { tip6963?: Partial<ProviderInfo> });
   /**
    * Also expose the wallets as `window.catcard` (like `window.phantom`), for dapps that
    * look wallets up by name rather than through EIP-6963 / Wallet Standard.
@@ -33,6 +37,8 @@ export interface CatCard {
   readonly ethereum?: CatCardEthereumProvider;
   /** Wallet Standard wallet. */
   readonly solana?: CatCardSolanaWallet;
+  /** TIP-1193 provider (with a `tronWeb` instance once connected). */
+  readonly tron?: CatCardTronProvider;
 }
 
 const INJECTED = Symbol.for('catcard-sdk.injected');
@@ -50,8 +56,9 @@ export function getCatCard(): CatCard | undefined {
 
 /**
  * Makes CatCard available to the page's dapps, like a browser wallet extension would:
- * an EIP-1193 provider announced via EIP-6963 for EVM, and a Wallet Standard wallet for
- * Solana. Calling it again returns the existing instance.
+ * an EIP-1193 provider announced via EIP-6963 for EVM, a Wallet Standard wallet for
+ * Solana, and a TIP-1193 provider announced via TIP-6963 for Tron. Calling it again
+ * returns the existing instance.
  *
  * @example
  * injectCatCard({ ethereum: { rpc: { 1: 'https://eth.example/rpc' } } });
@@ -76,7 +83,14 @@ export function injectCatCard(options: InjectOptions = {}): CatCard {
     registerCatCardSolanaWallet(solana);
   }
 
-  const catcard: CatCard = Object.freeze({ isCatCard: true, bridge, ethereum, solana });
+  let tron: CatCardTronProvider | undefined;
+  if (options.tron !== false) {
+    const { tip6963, ...tronOptions } = options.tron ?? {};
+    tron = new CatCardTronProvider({ origin, storage, ...tronOptions, bridge });
+    announceTIP6963Provider(tron, tip6963);
+  }
+
+  const catcard: CatCard = Object.freeze({ isCatCard: true, bridge, ethereum, solana, tron });
   (globalThis as { [INJECTED]?: CatCard })[INJECTED] = catcard;
   if (options.exposeGlobal !== false && typeof window !== 'undefined' && !window.catcard) {
     Object.defineProperty(window, 'catcard', { value: catcard, configurable: true, enumerable: false });

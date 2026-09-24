@@ -4,6 +4,7 @@ const entry = {
   index: 'src/index.ts',
   evm: 'src/evm/index.ts',
   solana: 'src/solana/index.ts',
+  tron: 'src/tron/index.ts',
   ui: 'src/ui/index.ts',
   inject: 'src/inject.ts',
   auto: 'src/auto.ts',
@@ -39,7 +40,8 @@ export default defineConfig([
     target: 'es2020',
     minify: true,
     sourcemap: true,
-    deps: { alwaysBundle: [/./], onlyBundle: false },
-    outputOptions: { inlineDynamicImports: true },
+    // TronWeb is too large to bundle: the Tron provider uses a global `TronWeb` when present.
+    deps: { alwaysBundle: [/^(?!tronweb)/], neverBundle: ['tronweb'], onlyBundle: false },
+    outputOptions: { codeSplitting: false },
   },
 ]);

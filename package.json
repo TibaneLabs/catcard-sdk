@@ -16,7 +16,10 @@
     "eip-1193",
     "eip-6963",
     "solana",
-    "wallet-standard"
+    "wallet-standard",
+    "tron",
+    "tip-1193",
+    "tip-6963"
   ],
   "type": "module",
   "sideEffects": [
@@ -56,6 +59,16 @@
       "require": {
         "types": "./dist/solana.d.cts",
         "default": "./dist/solana.cjs"
+      }
+    },
+    "./tron": {
+      "import": {
+        "types": "./dist/tron.d.ts",
+        "default": "./dist/tron.js"
+      },
+      "require": {
+        "types": "./dist/tron.d.cts",
+        "default": "./dist/tron.cjs"
       }
     },
     "./ui": {
@@ -112,7 +125,9 @@
   },
   "dependencies": {
     "@noble/curves": "^1.9.1",
+    "@noble/hashes": "^1.8.0",
     "@scure/base": "^1.2.5",
+    "@scure/bip32": "^1.7.0",
     "@scure/btc-signer": "^1.8.1",
     "@solana/wallet-standard-features": "^1.5.0",
     "@wallet-standard/base": "^1.1.1",

@@ -17,8 +17,9 @@ import {
   type Transport,
 } from 'viem';
 import { arbitrum, avalanche, base, bsc, mainnet, optimism, polygon, sepolia } from 'viem/chains';
-import { UserRejectedError, type CatCardBridge } from '../bridge';
+import type { CatCardBridge } from '../bridge';
 import { CatCardError } from '../errors';
+import { ProviderEvents, ProviderRpcError, toProviderRpcError } from '../rpc-error';
 import { ACCOUNT_UR_TYPES, decodeAccountExport } from '../registry/accounts';
 import { defaultStorage, readJSON, writeJSON, type KeyValueStorage } from '../storage';
 import { deriveEvmAccounts, type EvmAccount } from './accounts';
@@ -44,18 +45,6 @@ export interface EvmProviderOptions extends EvmSignerOptions {
   rpc?: Readonly<Record<number, string | Transport>>;
   /** Addresses derived from each exported account key. @default 5 */
   addressCount?: number;
-}
-
-/** EIP-1193 error. */
-export class ProviderRpcError extends Error {
-  constructor(
-    readonly code: number,
-    message: string,
-    readonly data?: unknown,
-  ) {
-    super(message);
-    this.name = 'ProviderRpcError';
-  }
 }
 
 interface StoredChain {
@@ -90,8 +79,6 @@ interface RpcTransactionRequest {
   accessList?: AccessList;
 }
 
-type Listener = (...args: any[]) => void;
-
 const invalidParams = (message: string) => new ProviderRpcError(-32602, message);
 
 function chainFromStored(c: StoredChain): Chain {
@@ -108,17 +95,17 @@ function chainFromStored(c: StoredChain): Chain {
  * EIP-1193 provider backed by a CatCard. Signing requests are shown as QR codes through the
  * bridge; everything else is forwarded to the chain's RPC endpoint.
  */
-export class CatCardEthereumProvider {
+export class CatCardEthereumProvider extends ProviderEvents {
   readonly isCatCard = true;
   private readonly bridge: CatCardBridge;
   private readonly storage: KeyValueStorage;
   private readonly storageKey: string;
   private readonly chains = new Map<number, Chain>();
   private readonly clients = new Map<number, PublicClient>();
-  private readonly listeners = new Map<string, Set<Listener>>();
   private state: StoredState;
 
   constructor(private readonly options: EvmProviderOptions) {
+    super();
     this.bridge = options.bridge;
     this.storage = options.storage ?? defaultStorage();
     this.storageKey = options.storageKey ?? 'catcard:evm';
@@ -238,37 +225,11 @@ export class CatCardEthereumProvider {
 
   // ---------------------------------------------------------------- EIP-1193
 
-  on(event: string, listener: Listener): this {
-    let set = this.listeners.get(event);
-    if (!set) this.listeners.set(event, (set = new Set()));
-    set.add(listener);
-    return this;
-  }
-
-  removeListener(event: string, listener: Listener): this {
-    this.listeners.get(event)?.delete(listener);
-    return this;
-  }
-
-  private emit(event: string, ...args: unknown[]): void {
-    for (const listener of this.listeners.get(event) ?? []) {
-      try {
-        listener(...args);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-  }
-
   async request({ method, params }: { method: string; params?: unknown }): Promise<any> {
     try {
       return await this.handle(method, Array.isArray(params) ? params : params === undefined ? [] : [params]);
     } catch (e) {
-      if (e instanceof ProviderRpcError) throw e;
-      if (e instanceof UserRejectedError) throw new ProviderRpcError(4001, e.message);
-      const err = e as { code?: unknown; message?: string; data?: unknown };
-      if (typeof err.code === 'number') throw new ProviderRpcError(err.code, err.message ?? 'RPC error', err.data);
-      throw new ProviderRpcError(-32603, err.message ?? String(e));
+      throw toProviderRpcError(e);
     }
   }
 
