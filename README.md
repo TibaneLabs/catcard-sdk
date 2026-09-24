@@ -1,4 +1,22 @@
-# catcard-sdk
+<p align="center">
+  <img src="assets/catcard-icon.svg" alt="CatCard" width="96" height="96">
+</p>
+
+<h1 align="center">catcard-sdk</h1>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/catcard-sdk"><img src="https://img.shields.io/npm/v/catcard-sdk?color=ff8a1f" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/catcard-sdk?activeTab=versions"><img src="https://img.shields.io/npm/v/catcard-sdk/next?label=next" alt="npm next"></a>
+  <a href="https://github.com/TibaneLabs/catcard-sdk/actions/workflows/ci.yml"><img src="https://github.com/TibaneLabs/catcard-sdk/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/npm/types/catcard-sdk" alt="TypeScript types">
+  <img src="https://img.shields.io/node/v/catcard-sdk" alt="Node.js version">
+  <a href="https://bundlephobia.com/package/catcard-sdk"><img src="https://img.shields.io/bundlephobia/minzip/catcard-sdk?label=core%20min%2Bgzip" alt="core bundle size"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/npm/l/catcard-sdk" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <b>EVM</b> · <b>Solana</b> · <b>Tron</b> · <b>Bitcoin</b> &nbsp;—&nbsp; over <b>BBQr</b> and <b>BC-UR</b> QR codes
+</p>
 
 JavaScript SDK for CatCard hardware wallets. It makes an air-gapped CatCard work like a regular browser wallet for EVM, Solana, Tron and Bitcoin dapps, and exposes the underlying QR protocols (BBQr, BC-UR) for everything else.
 
