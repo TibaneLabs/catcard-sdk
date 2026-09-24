@@ -10,6 +10,7 @@ export default defineConfig([
     dts: true,
     sourcemap: true,
     clean: true,
+    deps: { neverBundle: ['pako'] },
   },
   // Self-contained bundle for <script> tags, exposed as `window.CatCard`.
   {
@@ -20,6 +21,6 @@ export default defineConfig([
     target: 'es2020',
     minify: true,
     sourcemap: true,
-    noExternal: ['pako'],
+    deps: { alwaysBundle: ['pako'], onlyBundle: ['pako'] },
   },
 ]);
