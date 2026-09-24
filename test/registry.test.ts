@@ -10,7 +10,16 @@ import {
 import { EthSignRequest as KEthSignRequest, ETHSignature } from '@keystonehq/bc-ur-registry-eth';
 import { SolSignature as KSolSignature, SolSignRequest as KSolSignRequest } from '@keystonehq/bc-ur-registry-sol';
 import { describe, expect, it } from 'vitest';
+import { CborTag } from '../src/cbor';
 import {
+  BtcDataType,
+  decodeBtcSignature,
+  decodeTronSignature,
+  decodeTronSignRequest,
+  encodeBtcSignRequest,
+  encodeTronSignature,
+  encodeTronSignRequest,
+  TronDataType,
   decodeAccountExport,
   decodeEthSignature,
   decodeSolSignature,
@@ -24,7 +33,7 @@ import {
   SolSignType,
 } from '../src/registry';
 import { UR } from '../src/ur';
-import { hexToBytes } from '../src/util/bytes';
+import { hexToBytes, utf8Encode as utf8 } from '../src/util/bytes';
 
 const xfp = 0x12345678;
 const xfpBuf = Buffer.from('12345678', 'hex');
@@ -152,5 +161,57 @@ describe('sol-sign-request / sol-signature (Keystone interop)', () => {
     const sig = Buffer.from('bb'.repeat(64), 'hex');
     const decoded = decodeSolSignature(new UR('sol-signature', new KSolSignature(sig, Buffer.from(requestId)).toCBOR()));
     expect(decoded).toEqual({ requestId, signature: new Uint8Array(sig) });
+  });
+});
+
+describe('btc-sign-request / btc-signature (Keystone interop)', () => {
+  it('produces requests byte-identical to Keystone', async () => {
+    const { BtcSignRequest: KBtcSignRequest, BtcSignature: KBtcSignature } = await import('@keystonehq/bc-ur-registry-btc');
+    const requestId = randomUUIDBytes();
+    const ur = encodeBtcSignRequest({
+      requestId,
+      signData: utf8('hello'),
+      dataType: BtcDataType.Message,
+      derivationPaths: [KeyPath.parse("m/84'/0'/0'/0/0", xfp)],
+      addresses: ['bc1qexample'],
+      origin: 'catcard-sdk',
+    });
+    const kReq = KBtcSignRequest.constructBtcRequest(
+      formatUUID(requestId), ['12345678'], Buffer.from('hello'), 1, ["m/84'/0'/0'/0/0"], ['bc1qexample'], 'catcard-sdk',
+    );
+    expect(Buffer.from(ur.cbor).toString('hex')).toBe(kReq.toCBOR().toString('hex'));
+
+    const kSig = new KBtcSignature(Buffer.from('cc'.repeat(65), 'hex'), Buffer.from(requestId), Buffer.from(pubkey));
+    expect(decodeBtcSignature(new UR('btc-signature', kSig.toCBOR()))).toEqual({
+      requestId,
+      signature: hexToBytes('cc'.repeat(65)),
+      publicKey: pubkey,
+    });
+  });
+});
+
+describe('tron-sign-request / tron-signature', () => {
+  // Keystone's published @keystonehq/bc-ur-registry-tron build is broken, so check the
+  // layout from its source: {1: uuid, 2: sign-data, 3: data-type, 4: #6.304 path, 5: address, 6: origin}.
+  it('matches the Keystone field layout', () => {
+    const requestId = randomUUIDBytes();
+    const address = hexToBytes('41' + 'ab'.repeat(20));
+    const ur = encodeTronSignRequest({
+      requestId,
+      signData: hexToBytes('0a02'),
+      dataType: TronDataType.Transaction,
+      derivationPath: KeyPath.parse("m/44'/195'/0'/0/0", xfp),
+      address,
+      origin: 'catcard-sdk',
+    });
+    const map = ur.decodeCbor() as Map<number, unknown>;
+    expect([...map.keys()]).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(map.get(1)).toEqual(new CborTag(37, requestId));
+    expect((map.get(4) as CborTag).tag).toBe(304);
+    expect(decodeTronSignRequest(ur)).toMatchObject({ requestId, dataType: 1, address, origin: 'catcard-sdk' });
+
+    const sig = encodeTronSignature({ requestId, signature: hexToBytes('dd'.repeat(65)) });
+    expect(sig.type).toBe('tron-signature');
+    expect(decodeTronSignature(sig)).toEqual({ requestId, signature: hexToBytes('dd'.repeat(65)) });
   });
 });

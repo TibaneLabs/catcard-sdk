@@ -10,4 +10,8 @@ export const TAGS = {
   solSignRequest: 1101,
   solSignature: 1102,
   cryptoMultiAccounts: 1103,
+  tronSignRequest: 5101,
+  tronSignature: 5102,
+  btcSignRequest: 8101,
+  btcSignature: 8102,
 } as const;
