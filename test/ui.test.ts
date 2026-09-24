@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from 'vitest';
 import { UserRejectedError } from '../src/bridge';
-import { injectCatCard } from '../src/inject';
+import { getCatCard, injectCatCard } from '../src/inject';
 import { createURSequence } from '../src/sequence';
 import { memoryStorage } from '../src/storage';
 import { createModalBridge } from '../src/ui';
@@ -86,16 +86,19 @@ describe('injectCatCard', () => {
     const injected = injectCatCard({ bridge, storage: memoryStorage() });
 
     expect(announced).toHaveLength(1);
-    expect(announced[0].info).toMatchObject({ name: 'CatCard', rdns: 'net.tibane.catcard' });
+    expect(announced[0].info).toMatchObject({ name: 'CatCard', rdns: 'net.tibane.catcard-sdk' });
     expect(announced[0].info.icon).toMatch(/^data:image\/svg\+xml;base64,/);
-    expect(announced[0].provider).toBe(injected.evm);
+    expect(announced[0].provider).toBe(injected.ethereum);
     window.dispatchEvent(new Event('eip6963:requestProvider'));
     expect(announced).toHaveLength(2);
 
     expect(registered).toEqual([injected.solana]);
     expect(injectCatCard()).toBe(injected);
+    expect(getCatCard()).toBe(injected);
+    expect(window.catcard).toBe(injected);
+    expect(window.catcard!.ethereum!.isCatCard).toBe(true);
 
-    const accounts = await injected.evm!.request({ method: 'eth_requestAccounts' });
+    const accounts = await injected.ethereum!.request({ method: 'eth_requestAccounts' });
     expect(accounts).toHaveLength(1);
   });
 });

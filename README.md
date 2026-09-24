@@ -18,7 +18,7 @@ npm install catcard-sdk
 import { injectCatCard } from 'catcard-sdk/inject';
 
 injectCatCard({
-  evm: {
+  ethereum: {
     rpc: {
       1: 'https://mainnet.example/rpc',   // your RPC endpoints (URL or viem transport)
       8453: 'https://base.example/rpc',
@@ -30,7 +30,7 @@ injectCatCard({
 });
 ```
 
-That's it: "CatCard" now appears in the dapp's wallet picker alongside extension wallets. Or, with default settings, simply `import 'catcard-sdk/auto'`, or add a script tag:
+That's it: "CatCard" now appears in the dapp's wallet picker alongside extension wallets. Dapps (or SDKs) that look wallets up by name can use `window.catcard.ethereum` / `window.catcard.solana`, the way `window.phantom.*` works; the same object is returned by `getCatCard()`. `window.ethereum` is never overwritten. Or, with default settings, simply `import 'catcard-sdk/auto'`, or add a script tag:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/catcard-sdk/dist/catcard-inject.iife.js"></script>
@@ -50,9 +50,9 @@ Chains without a configured endpoint fall back to their public RPC, which is rat
 
 | Option | Default |
 | --- | --- |
-| `evm.rpc` | `{ [chainId]: url \| viem Transport }` → each chain's public RPC from viem |
-| `evm.chains` | Ethereum, Sepolia, Base, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche (dapps can add more via `wallet_addEthereumChain`) |
-| `evm.defaultChainId` | the first chain |
+| `ethereum.rpc` | `{ [chainId]: url \| viem Transport }` → each chain's public RPC from viem |
+| `ethereum.chains` | Ethereum, Sepolia, Base, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche (dapps can add more via `wallet_addEthereumChain`) |
+| `ethereum.defaultChainId` | the first chain |
 | `solana.rpc` | `{ 'solana:mainnet' \| 'solana:devnet' \| 'solana:testnet': url }` → public cluster endpoints |
 
 ### Supported methods

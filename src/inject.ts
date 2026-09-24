@@ -14,18 +14,39 @@ export interface InjectOptions {
   /** App name shown on the device. @default location.hostname */
   origin?: string;
   /** EVM provider options (RPC endpoints, chains...), or `false` to disable. */
-  evm?: false | (Partial<Omit<EvmProviderOptions, 'bridge'>> & { eip6963?: Partial<EIP6963ProviderInfo> });
+  ethereum?: false | (Partial<Omit<EvmProviderOptions, 'bridge'>> & { eip6963?: Partial<EIP6963ProviderInfo> });
   /** Solana wallet options (RPC endpoints, chains...), or `false` to disable. */
   solana?: false | Partial<Omit<SolanaWalletOptions, 'bridge'>>;
+  /**
+   * Also expose the wallets as `window.catcard` (like `window.phantom`), for dapps that
+   * look wallets up by name rather than through EIP-6963 / Wallet Standard.
+   * `window.ethereum` is never touched. @default true
+   */
+  exposeGlobal?: boolean;
 }
 
-export interface InjectedCatCard {
-  bridge: CatCardBridge;
-  evm?: CatCardEthereumProvider;
-  solana?: CatCardSolanaWallet;
+/** The injected wallets; also available as `window.catcard` and through {@link getCatCard}. */
+export interface CatCard {
+  readonly isCatCard: true;
+  readonly bridge: CatCardBridge;
+  /** EIP-1193 provider. */
+  readonly ethereum?: CatCardEthereumProvider;
+  /** Wallet Standard wallet. */
+  readonly solana?: CatCardSolanaWallet;
 }
 
 const INJECTED = Symbol.for('catcard-sdk.injected');
+
+declare global {
+  interface Window {
+    catcard?: CatCard;
+  }
+}
+
+/** The instance created by {@link injectCatCard}, if any. */
+export function getCatCard(): CatCard | undefined {
+  return (globalThis as { [INJECTED]?: CatCard })[INJECTED];
+}
 
 /**
  * Makes CatCard available to the page's dapps, like a browser wallet extension would:
@@ -33,26 +54,32 @@ const INJECTED = Symbol.for('catcard-sdk.injected');
  * Solana. Calling it again returns the existing instance.
  *
  * @example
- * injectCatCard({ evm: { rpc: { 1: 'https://eth.example/rpc' } } });
+ * injectCatCard({ ethereum: { rpc: { 1: 'https://eth.example/rpc' } } });
  */
-export function injectCatCard(options: InjectOptions = {}): InjectedCatCard {
-  const g = globalThis as { [INJECTED]?: InjectedCatCard };
-  if (g[INJECTED]) return g[INJECTED];
+export function injectCatCard(options: InjectOptions = {}): CatCard {
+  const existing = getCatCard();
+  if (existing) return existing;
 
   const bridge = options.bridge ?? createModalBridge(options.modal);
   const storage = options.storage ?? defaultStorage();
   const origin = options.origin ?? (typeof location !== 'undefined' ? location.hostname : undefined);
-  const injected: InjectedCatCard = { bridge };
 
-  if (options.evm !== false) {
-    const { eip6963, ...evm } = options.evm ?? {};
-    injected.evm = new CatCardEthereumProvider({ origin, storage, ...evm, bridge });
-    announceEIP6963Provider(injected.evm, eip6963);
+  let ethereum: CatCardEthereumProvider | undefined;
+  if (options.ethereum !== false) {
+    const { eip6963, ...evm } = options.ethereum ?? {};
+    ethereum = new CatCardEthereumProvider({ origin, storage, ...evm, bridge });
+    announceEIP6963Provider(ethereum, eip6963);
   }
+  let solana: CatCardSolanaWallet | undefined;
   if (options.solana !== false) {
-    injected.solana = new CatCardSolanaWallet({ origin, storage, ...options.solana, bridge });
-    registerCatCardSolanaWallet(injected.solana);
+    solana = new CatCardSolanaWallet({ origin, storage, ...options.solana, bridge });
+    registerCatCardSolanaWallet(solana);
   }
-  g[INJECTED] = injected;
-  return injected;
+
+  const catcard: CatCard = Object.freeze({ isCatCard: true, bridge, ethereum, solana });
+  (globalThis as { [INJECTED]?: CatCard })[INJECTED] = catcard;
+  if (options.exposeGlobal !== false && typeof window !== 'undefined' && !window.catcard) {
+    Object.defineProperty(window, 'catcard', { value: catcard, configurable: true, enumerable: false });
+  }
+  return catcard;
 }

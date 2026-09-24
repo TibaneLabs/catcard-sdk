@@ -8,7 +8,7 @@ export interface EIP6963ProviderInfo {
 }
 
 /** Reverse-DNS identifier used for EIP-6963 announcements. */
-export const CATCARD_RDNS = 'net.tibane.catcard';
+export const CATCARD_RDNS = 'net.tibane.catcard-sdk';
 
 /**
  * Announces a provider to dapps via EIP-6963 (as wallet pickers like RainbowKit,
