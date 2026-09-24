@@ -10,8 +10,8 @@ on:
       dist-tag:
         description: npm dist-tag to publish under
         type: choice
-        options: [next, latest]
-        default: next
+        options: [latest, next]
+        default: latest
 
 permissions:
   contents: read
@@ -33,5 +33,5 @@ jobs:
         if: github.ref_type == 'tag'
         run: test "${GITHUB_REF_NAME#v}" = "$(node -p 'require("./package.json").version')"
       - run: npm run check
-      # Releases stay on `next` until promoted (npm dist-tag add catcard-sdk@<version> latest).
-      - run: npm publish --tag ${{ inputs.dist-tag || 'next' }}
+      # Tag pushes publish as `latest`; a manual run can publish a pre-release under `next`.
+      - run: npm publish --tag ${{ inputs.dist-tag || 'latest' }}

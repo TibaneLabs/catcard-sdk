@@ -6,7 +6,6 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/catcard-sdk"><img src="https://img.shields.io/npm/v/catcard-sdk?color=ff8a1f" alt="npm version"></a>
-  <a href="https://www.npmjs.com/package/catcard-sdk?activeTab=versions"><img src="https://img.shields.io/npm/v/catcard-sdk/next?label=next" alt="npm next"></a>
   <a href="https://github.com/TibaneLabs/catcard-sdk/actions/workflows/ci.yml"><img src="https://github.com/TibaneLabs/catcard-sdk/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/npm/types/catcard-sdk" alt="TypeScript types">
   <img src="https://img.shields.io/node/v/catcard-sdk" alt="Node.js version">

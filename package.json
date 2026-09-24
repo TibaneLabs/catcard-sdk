@@ -186,8 +186,5 @@
     "tronweb": {
       "optional": true
     }
-  },
-  "publishConfig": {
-    "tag": "next"
   }
 }
