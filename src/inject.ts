@@ -1,3 +1,10 @@
+import {
+  CatCardBitcoinWallet,
+  CatCardSatsConnectProvider,
+  registerCatCardBitcoinWallet,
+  registerWBIPProvider,
+  type BitcoinWalletOptions,
+} from './bitcoin';
 import type { CatCardBridge } from './bridge';
 import { announceEIP6963Provider, CatCardEthereumProvider, type EIP6963ProviderInfo, type EvmProviderOptions } from './evm';
 import { CatCardSolanaWallet, registerCatCardSolanaWallet, type SolanaWalletOptions } from './solana';
@@ -19,6 +26,8 @@ export interface InjectOptions {
   ethereum?: false | (Partial<Omit<EvmProviderOptions, 'bridge'>> & { eip6963?: Partial<EIP6963ProviderInfo> });
   /** Solana wallet options (RPC endpoints, chains...), or `false` to disable. */
   solana?: false | Partial<Omit<SolanaWalletOptions, 'bridge'>>;
+  /** Bitcoin wallet options (network, Esplora endpoint...), or `false` to disable. */
+  bitcoin?: false | Partial<Omit<BitcoinWalletOptions, 'bridge'>>;
   /** Tron provider options (full node endpoints...), or `false` to disable. Needs `tronweb`. */
   tron?: false | (Partial<Omit<TronProviderOptions, 'bridge'>> & { tip6963?: Partial<ProviderInfo> });
   /**
@@ -39,6 +48,8 @@ export interface CatCard {
   readonly solana?: CatCardSolanaWallet;
   /** TIP-1193 provider (with a `tronWeb` instance once connected). */
   readonly tron?: CatCardTronProvider;
+  /** Bitcoin Wallet Standard wallet; `bitcoin.provider` is the sats-connect / WBIP request API. */
+  readonly bitcoin?: CatCardBitcoinWallet;
 }
 
 const INJECTED = Symbol.for('catcard-sdk.injected');
@@ -57,7 +68,8 @@ export function getCatCard(): CatCard | undefined {
 /**
  * Makes CatCard available to the page's dapps, like a browser wallet extension would:
  * an EIP-1193 provider announced via EIP-6963 for EVM, a Wallet Standard wallet for
- * Solana, and a TIP-1193 provider announced via TIP-6963 for Tron. Calling it again
+ * Solana, a TIP-1193 provider announced via TIP-6963 for Tron, and for Bitcoin a Wallet
+ * Standard wallet plus a sats-connect provider registered via WBIP004. Calling it again
  * returns the existing instance.
  *
  * @example
@@ -90,10 +102,18 @@ export function injectCatCard(options: InjectOptions = {}): CatCard {
     announceTIP6963Provider(tron, tip6963);
   }
 
-  const catcard: CatCard = Object.freeze({ isCatCard: true, bridge, ethereum, solana, tron });
+  let bitcoin: CatCardBitcoinWallet | undefined;
+  if (options.bitcoin !== false) {
+    bitcoin = new CatCardBitcoinWallet({ origin, storage, ...options.bitcoin, bridge });
+    registerCatCardBitcoinWallet(bitcoin);
+  }
+
+  const catcard: CatCard = Object.freeze({ isCatCard: true, bridge, ethereum, solana, tron, bitcoin });
   (globalThis as { [INJECTED]?: CatCard })[INJECTED] = catcard;
   if (options.exposeGlobal !== false && typeof window !== 'undefined' && !window.catcard) {
     Object.defineProperty(window, 'catcard', { value: catcard, configurable: true, enumerable: false });
+    // WBIP004 providers are looked up by a dotted path from `window`.
+    if (bitcoin) registerWBIPProvider(CatCardSatsConnectProvider.providerInfo('catcard.bitcoin.provider'));
   }
   return catcard;
 }

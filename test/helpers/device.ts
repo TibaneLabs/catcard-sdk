@@ -4,12 +4,14 @@ import { secp256k1 } from '@noble/curves/secp256k1';
 import { hashMessage, hashTypedData, keccak256, toHex, type Hex } from 'viem';
 import { HDKey } from 'viem/accounts';
 import type { CatCardBridge, ExchangeRequest } from '../../src/bridge';
-import { cborEncode } from '../../src/cbor';
+import { CborTag, cborEncode, type CborValue } from '../../src/cbor';
 import { QRReceiver } from '../../src/receiver';
 import {
   decodeEthSignRequest,
   decodeSolSignRequest,
   decodeTronSignRequest,
+  decodeBtcSignRequest,
+  encodeBtcSignature,
   encodeTronSignature,
   TronDataType,
   EthDataType,
@@ -21,9 +23,13 @@ import {
 } from '../../src/registry';
 import { createURSequence, type QRSequence } from '../../src/sequence';
 import { encodeCryptoHDKey } from '../../src/registry/hdkey';
-import { UR, URDecoder } from '../../src/ur';
+import { UR } from '../../src/ur';
 import { utf8Decode } from '../../src/util/bytes';
 import { hmac } from '@noble/hashes/hmac';
+import * as btc from '@scure/btc-signer';
+import { hashBitcoinMessage } from '../../src/bitcoin/signer';
+import { createBBQrSequence } from '../../src/sequence';
+import type { ScanResult } from '../../src/receiver';
 import { sha256 } from '@noble/hashes/sha256';
 import { hashTronMessage } from '../../src/tron/signer';
 import { sha512 } from '@noble/hashes/sha512';
@@ -103,22 +109,89 @@ export class SimulatedCatCard {
   }
 
   /** Reads request frames until complete, as the device camera would. */
-  scan(sequence: QRSequence): UR {
-    const decoder = new URDecoder();
-    for (let i = 0; !decoder.isComplete(); i++) {
+  scan(sequence: QRSequence): ScanResult {
+    const receiver = new QRReceiver();
+    for (let i = 0; !receiver.complete; i++) {
       if (i > 10_000) throw new Error('device could not read request');
-      decoder.receivePart(sequence.nextFrame());
+      receiver.receive(sequence.nextFrame());
     }
-    const ur = decoder.result()!;
-    this.requests.push(ur);
-    return ur;
+    const result = receiver.result()!;
+    if (result.format === 'ur') this.requests.push(result.ur);
+    return result;
   }
 
-  respond(request: UR): UR {
-    if (request.type === 'eth-sign-request') return this.signEth(request);
-    if (request.type === 'sol-sign-request') return this.signSol(request);
-    if (request.type === 'tron-sign-request') return this.signTron(request);
-    throw new Error(`device cannot handle ${request.type}`);
+  respond(request: ScanResult): QRSequence {
+    if (request.format === 'bbqr' && request.fileType === 'P') return this.signPsbt(request.data, 'bbqr');
+    if (request.format !== 'ur') throw new Error('device cannot handle this QR');
+    const ur = request.ur;
+    if (ur.type === 'crypto-psbt' || ur.type === 'psbt') return this.signPsbt(ur.toBytes(), 'ur');
+    if (ur.type === 'eth-sign-request') return createURSequence(this.signEth(ur));
+    if (ur.type === 'sol-sign-request') return createURSequence(this.signSol(ur));
+    if (ur.type === 'tron-sign-request') return createURSequence(this.signTron(ur));
+    if (ur.type === 'btc-sign-request') return createURSequence(this.signBtcMessage(ur));
+    throw new Error(`device cannot handle ${ur.type}`);
+  }
+
+  // ---- Bitcoin
+
+  /** Return a finalized transaction (BBQr T) instead of a signed PSBT. */
+  finalizeBitcoin = false;
+  readonly psbtRequests: Uint8Array[] = [];
+
+  private bitcoinKeys(coinType = 0) {
+    return [44, 49, 84, 86].map((purpose) => {
+      const path = KeyPath.parse(`m/${purpose}'/${coinType}'/0'`, this.fingerprint);
+      return { purpose, path, key: this.master.derive(path.toString()) };
+    });
+  }
+
+  /** `crypto-account` export (Keystone style) of BIP44/49/84/86 accounts, with script expressions. */
+  bitcoinAccountExport(coinType = 0): UR {
+    const scripts: Record<number, number[]> = { 44: [403], 49: [400, 404], 84: [404], 86: [409] };
+    const outputs = this.bitcoinKeys(coinType).map(({ purpose, path, key }) => {
+      const hdkey = encodeCryptoHDKey({ key: key.publicKey!, chainCode: key.chainCode!, origin: path, children: KeyPath.parse('0/*') });
+      let output: CborTag = new CborTag(303, hdkey);
+      for (const tag of [...scripts[purpose]!].reverse()) output = new CborTag(tag, output);
+      return output;
+    });
+    return UR.fromValue(new Map<number, CborValue>([[1, this.fingerprint], [2, outputs]]), 'crypto-account');
+  }
+
+  /** Coldcard-style generic JSON export, as the Bitcoin-only firmware shows over BBQr. */
+  bitcoinJsonExport(coinType = 0): Record<string, unknown> {
+    const json: Record<string, unknown> = { chain: coinType ? 'XTN' : 'BTC', xfp: this.fingerprint.toString(16).padStart(8, '0').toUpperCase(), account: 0 };
+    for (const { purpose, path, key } of this.bitcoinKeys(coinType)) {
+      json[`bip${purpose}`] = { deriv: path.toString(), xpub: key.publicExtendedKey };
+    }
+    return json;
+  }
+
+  private signPsbt(psbt: Uint8Array, format: 'bbqr' | 'ur'): QRSequence {
+    this.psbtRequests.push(psbt);
+    const tx = btc.Transaction.fromPSBT(psbt, { allowUnknown: true, allowUnknownInputs: true, allowUnknownOutputs: true });
+    for (let i = 0; i < tx.inputsLength; i++) {
+      const input = tx.getInput(i);
+      const der = input.bip32Derivation?.[0]?.[1] ?? input.tapBip32Derivation?.[0]?.[1].der;
+      if (!der || der.fingerprint !== this.fingerprint) continue;
+      let key = this.master;
+      for (const index of der.path) key = key.deriveChild(index);
+      if (this.signWithWrongKey) continue; // Simulate a device that does not sign.
+      tx.signIdx(key.privateKey!, i);
+    }
+    if (this.finalizeBitcoin) {
+      tx.finalize();
+      return createBBQrSequence(tx.extract(), 'T');
+    }
+    const signed = tx.toPSBT();
+    return format === 'bbqr' ? createBBQrSequence(signed, 'P') : createURSequence(UR.fromBytes(signed, 'crypto-psbt'));
+  }
+
+  private signBtcMessage(ur: UR): UR {
+    const req = decodeBtcSignRequest(ur);
+    const key = this.master.derive(req.derivationPaths[0]!.toString());
+    const sig = secp256k1.sign(hashBitcoinMessage(req.signData), key.privateKey!);
+    const signature = new Uint8Array([31 + sig.recovery, ...sig.toCompactRawBytes()]);
+    return encodeBtcSignature({ requestId: req.requestId, signature, publicKey: key.publicKey! });
   }
 
   private signEth(ur: UR): UR {
@@ -177,15 +250,19 @@ export class SimulatedCatCard {
 export class SimulatedBridge implements CatCardBridge {
   exchanges: ExchangeRequest<unknown>[] = [];
   /** What the device shows for scan-only exchanges. */
-  scanOnly?: () => UR;
+  scanOnly?: () => UR | QRSequence;
 
   constructor(readonly device: SimulatedCatCard) {}
 
   async exchange<T>(request: ExchangeRequest<T>): Promise<T> {
     this.exchanges.push(request as ExchangeRequest<unknown>);
-    const response = request.request ? this.device.respond(this.device.scan(request.request)) : this.scanOnly!();
+    let frames: QRSequence;
+    if (request.request) frames = this.device.respond(this.device.scan(request.request));
+    else {
+      const shown = this.scanOnly!();
+      frames = shown instanceof UR ? createURSequence(shown) : shown;
+    }
     const receiver = new QRReceiver();
-    const frames = createURSequence(response);
     while (!receiver.complete) receiver.receive(frames.nextFrame());
     return request.parse(receiver.result()!);
   }

@@ -46,9 +46,12 @@ export interface TronProviderOptions extends TronSignerOptions {
   /** Addresses derived from the exported account. @default 5 */
   addressCount?: number;
   /**
-   * Creates the TronWeb instance handed to dapps. By default uses a global `TronWeb`
-   * (script-tag builds) or imports the `tronweb` package.
+   * The TronWeb class (`import { TronWeb } from 'tronweb'`), used to create the instance
+   * handed to dapps. Defaults to a global `TronWeb` (script-tag builds); in Node.js the
+   * `tronweb` package is imported if installed.
    */
+  TronWeb?: new (options: { fullHost: string; headers?: Record<string, string> }) => TronWebLike;
+  /** Full control over the TronWeb instance creation. Takes precedence over `TronWeb`. */
   tronWebFactory?: TronWebFactory;
 }
 
@@ -58,17 +61,17 @@ interface StoredState {
   chainId?: string;
 }
 
-async function defaultTronWebFactory(options: { fullHost: string; headers?: Record<string, string> }): Promise<TronWebLike> {
+async function findTronWeb(): Promise<(new (options: { fullHost: string; headers?: Record<string, string> }) => TronWebLike) | undefined> {
   const g = globalThis as { TronWeb?: any };
-  let TronWeb = typeof g.TronWeb === 'function' ? g.TronWeb : g.TronWeb?.TronWeb;
-  if (typeof TronWeb !== 'function') {
-    try {
-      ({ TronWeb } = await import('tronweb'));
-    } catch {
-      throw new CatCardError('The Tron provider needs TronWeb: install the `tronweb` package (or load it globally).');
-    }
+  const global = typeof g.TronWeb === 'function' ? g.TronWeb : g.TronWeb?.TronWeb;
+  if (typeof global === 'function') return global;
+  // Only meaningful in Node.js: hidden from bundlers so apps without `tronweb` still build.
+  const specifier = 'tronweb';
+  try {
+    return (await import(/* @vite-ignore */ /* webpackIgnore: true */ specifier)).TronWeb;
+  } catch {
+    return undefined;
   }
-  return new TronWeb(options) as TronWebLike;
 }
 
 /**
@@ -139,8 +142,16 @@ export class CatCardTronProvider extends ProviderEvents {
 
   private refreshTronWeb(): Promise<TronWebLike> {
     const network = this.network(this.chainId)!;
-    const factory = this.options.tronWebFactory ?? defaultTronWebFactory;
-    const ready = Promise.resolve(factory({ fullHost: network.fullHost, headers: network.headers })).then((tronWeb) => {
+    const config = { fullHost: network.fullHost, headers: network.headers };
+    const create = async (): Promise<TronWebLike> => {
+      if (this.options.tronWebFactory) return this.options.tronWebFactory(config);
+      const TronWeb = this.options.TronWeb ?? (await findTronWeb());
+      if (!TronWeb) {
+        throw new CatCardError('The Tron provider needs TronWeb: pass it as `tron: { TronWeb }` (from the `tronweb` package).');
+      }
+      return new TronWeb(config);
+    };
+    const ready = create().then((tronWeb) => {
       this.hook(tronWeb);
       if (this.tronWebReady === ready) this.tronWeb = tronWeb;
       return tronWeb;

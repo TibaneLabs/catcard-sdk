@@ -5,6 +5,7 @@ const entry = {
   evm: 'src/evm/index.ts',
   solana: 'src/solana/index.ts',
   tron: 'src/tron/index.ts',
+  bitcoin: 'src/bitcoin/index.ts',
   ui: 'src/ui/index.ts',
   inject: 'src/inject.ts',
   auto: 'src/auto.ts',

@@ -19,7 +19,10 @@
     "wallet-standard",
     "tron",
     "tip-1193",
-    "tip-6963"
+    "tip-6963",
+    "sats-connect",
+    "wbip",
+    "bitcoin-wallet-standard"
   ],
   "type": "module",
   "sideEffects": [
@@ -69,6 +72,16 @@
       "require": {
         "types": "./dist/tron.d.cts",
         "default": "./dist/tron.cjs"
+      }
+    },
+    "./bitcoin": {
+      "import": {
+        "types": "./dist/bitcoin.d.ts",
+        "default": "./dist/bitcoin.js"
+      },
+      "require": {
+        "types": "./dist/bitcoin.d.cts",
+        "default": "./dist/bitcoin.cjs"
       }
     },
     "./ui": {

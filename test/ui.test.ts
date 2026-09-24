@@ -92,7 +92,15 @@ describe('injectCatCard', () => {
     window.dispatchEvent(new Event('eip6963:requestProvider'));
     expect(announced).toHaveLength(2);
 
-    expect(registered).toEqual([injected.solana]);
+    expect(registered).toEqual([injected.solana, injected.bitcoin]);
+    const tip6963: any[] = [];
+    window.addEventListener('TIP6963:announceProvider', (e) => tip6963.push((e as CustomEvent).detail));
+    window.dispatchEvent(new Event('TIP6963:requestProvider'));
+    expect(tip6963[0].provider).toBe(injected.tron);
+    const wbip = (window as any).btc_providers;
+    expect(wbip).toEqual([expect.objectContaining({ id: 'catcard.bitcoin.provider', name: 'CatCard' })]);
+    // sats-connect resolves providers by id.
+    expect(wbip[0].id.split('.').reduce((o: any, k: string) => o?.[k], window)).toBe(injected.bitcoin!.provider);
     expect(injectCatCard()).toBe(injected);
     expect(getCatCard()).toBe(injected);
     expect(window.catcard).toBe(injected);

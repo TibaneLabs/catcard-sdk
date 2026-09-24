@@ -18,12 +18,17 @@ export interface AccountExport {
 
 export const ACCOUNT_UR_TYPES: readonly string[] = ['crypto-hdkey', 'crypto-account', 'crypto-multi-accounts'];
 
-/** Finds the `crypto-hdkey` inside a `crypto-output`, unwrapping script expression tags. */
-function unwrapOutput(value: CborValue): CborValue {
+/** Decodes the `crypto-hdkey` inside a `crypto-output`, keeping its script expression tags. */
+function decodeOutput(value: CborValue): CryptoHDKey {
+  const scriptExpressions: number[] = [];
   let current = value;
-  while (current instanceof CborTag && current.tag !== TAGS.cryptoHDKey) current = current.value;
+  while (current instanceof CborTag && current.tag !== TAGS.cryptoHDKey) {
+    scriptExpressions.push(current.tag);
+    current = current.value;
+  }
   if (!(current instanceof CborTag)) throw new QRDecodeError('crypto-output does not contain an HD key');
-  return current;
+  const key = decodeCryptoHDKey(current);
+  return scriptExpressions.length ? { ...key, scriptExpressions } : key;
 }
 
 /** Decodes a `crypto-hdkey`, `crypto-account` or `crypto-multi-accounts` UR. */
@@ -40,7 +45,7 @@ export function decodeAccountExport(ur: UR): AccountExport {
       if (!Array.isArray(outputs)) throw new QRDecodeError('crypto-account: missing output descriptors');
       return {
         masterFingerprint: optUint(map, 1, 'crypto-account'),
-        keys: outputs.map((o) => decodeCryptoHDKey(unwrapOutput(o))),
+        keys: outputs.map(decodeOutput),
       };
     }
     case 'crypto-multi-accounts': {
@@ -74,10 +79,13 @@ export function keySourceFingerprint(accounts: AccountExport, key: CryptoHDKey):
   return key.origin?.sourceFingerprint || accounts.masterFingerprint;
 }
 
-/** The SLIP-44 coin type of a key, from its use-info or the second component of its origin path. */
+/**
+ * The SLIP-44 coin type of a key: the second component of a BIP43-style origin path
+ * (`m/purpose'/coin'/...`, e.g. BIP44/49/84/86), or its use-info.
+ */
 export function keyCoinType(key: CryptoHDKey): number | undefined {
-  const fromPath = key.origin?.components[1];
-  if (key.origin?.components[0]?.index === 44 && fromPath?.index != null) return fromPath.index;
+  const [purpose, coin] = key.origin?.components ?? [];
+  if (purpose?.hardened && coin?.hardened && coin.index !== null) return coin.index;
   return key.useInfo?.type;
 }
 

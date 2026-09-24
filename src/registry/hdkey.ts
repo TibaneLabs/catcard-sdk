@@ -20,6 +20,11 @@ export interface CryptoHDKey {
   parentFingerprint?: number;
   name?: string;
   note?: string;
+  /**
+   * Script expression tags wrapping the key in a `crypto-output` (outermost first), e.g.
+   * `[404]` for `wpkh(...)` or `[400, 404]` for `sh(wpkh(...))`. Not part of `crypto-hdkey` itself.
+   */
+  scriptExpressions?: number[];
 }
 
 export function encodeCryptoHDKey(key: CryptoHDKey): CborValue {
